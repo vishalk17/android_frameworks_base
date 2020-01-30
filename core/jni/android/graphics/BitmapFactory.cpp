@@ -308,6 +308,9 @@ static jobject doDecode(JNIEnv* env, SkStreamRewindable* stream, jobject padding
         scaledWidth = codec->getInfo().width() / sampleSize;
         scaledHeight = codec->getInfo().height() / sampleSize;
     }
+    
+
+    
 
     // Set the decode colorType
     SkColorType decodeColorType = codec->computeOutputColorType(prefColorType);
@@ -347,6 +350,45 @@ static jobject doDecode(JNIEnv* env, SkStreamRewindable* stream, jobject padding
         scaledWidth = static_cast<int>(scaledWidth * scale + 0.5f);
         scaledHeight = static_cast<int>(scaledHeight * scale + 0.5f);
     }
+
+
+    /* TRONX2100 and RAWMAIN for MTK L861 fixes skewed display for hw bitmaps */
+    /* also needs to revert bitmap copy hw 
+     * https://gitlab.bangl.de/crackling-dev/android_frameworks_base/commit/05126d151eb3caa85bd3a039cffb6e37940c3fa4 */
+     
+    const int needoffset = 32;
+    const int minScaleHandlesize = 16; // we do not handle smaller sizes needoffset/2
+    bool scalexup = false;
+    if (isHardware  && scaledWidth >= minScaleHandlesize && scaledHeight >= minScaleHandlesize) {
+		int rx = scaledWidth % needoffset;
+		int ry = scaledHeight % needoffset;
+		// ALOGW("ScaleInfo width: %d , height %d , colortype %x, rx: %d , ry: %d", scaledWidth, scaledHeight,prefColorType,rx,ry);
+		if (rx != 0 ) {
+			willScale = true;
+			if (rx >= (needoffset/2)){
+				// upscale 
+				scalexup = true;
+				rx = needoffset - rx;
+				scaledWidth = scaledWidth + rx;
+			} else {
+				scaledWidth = scaledWidth - rx;
+			}
+		}
+		if (ry != 0){
+			willScale = true;
+			if (ry >= (needoffset/2) || scalexup == true){
+				//upscale
+				ry = needoffset - ry;
+				scaledHeight = scaledHeight + ry;
+			} else {
+				scaledHeight = scaledHeight - ry;
+			}
+		}
+		
+	}
+    /* END TRONX2100 */
+
+
 
     android::Bitmap* reuseBitmap = nullptr;
     unsigned int existingBufferSize = 0;
