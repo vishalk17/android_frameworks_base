@@ -278,6 +278,13 @@ public class MediaRecorder
          *  {@link #DEFAULT} otherwise. */
         public static final int UNPROCESSED = 9;
 
+        /** 
+         * For MTK Compatibility
+         * @hide
+         **/
+        @SystemApi
+        public static final int FM_TUNER = 1998;
+
         /**
          * Audio source for capturing broadcast radio tuner output.
          * @hide

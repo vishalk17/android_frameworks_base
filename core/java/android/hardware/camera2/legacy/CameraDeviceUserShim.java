@@ -590,6 +590,7 @@ public class CameraDeviceUserShim implements ICameraDeviceUser {
         }
     }
 
+
     @Override
     public void finalizeOutputConfigurations(int steamId, OutputConfiguration config) {
         String err = "Finalizing output configuration is not supported on legacy devices";
@@ -610,6 +611,7 @@ public class CameraDeviceUserShim implements ICameraDeviceUser {
         Log.e(TAG, err);
         throw new ServiceSpecificException(ICameraService.ERROR_INVALID_OPERATION, err);
     }
+
 
     @Override
     public CameraMetadataNative createDefaultRequest(int templateId) {

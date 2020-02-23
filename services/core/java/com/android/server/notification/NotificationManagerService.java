@@ -1788,11 +1788,6 @@ public class NotificationManagerService extends SystemService {
         @Override
         public boolean areNotificationsEnabledForPackage(String pkg, int uid) {
             checkCallerIsSystemOrSameApp(pkg);
-            if (UserHandle.getCallingUserId() != UserHandle.getUserId(uid)) {
-                getContext().enforceCallingPermission(
-                        android.Manifest.permission.INTERACT_ACROSS_USERS,
-                        "canNotifyAsPackage for uid " + uid);
-            }
 
             return mRankingHelper.getImportance(pkg, uid) != IMPORTANCE_NONE;
         }
@@ -4766,15 +4761,8 @@ public class NotificationManagerService extends SystemService {
                         userId, mustHaveFlags, mustNotHaveFlags, reason, listenerName);
 
                 synchronized (mNotificationLock) {
-                    // If the notification is currently enqueued, repost this runnable so it has a
-                    // chance to notify listeners
-                    if ((findNotificationByListLocked(
-                            mEnqueuedNotifications, pkg, tag, id, userId)) != null) {
-                        mHandler.post(this);
-                    }
-                    // Look for the notification in the posted list, since we already checked enq
-                    NotificationRecord r = findNotificationByListLocked(
-                            mNotificationList, pkg, tag, id, userId);
+                    // Look for the notification, searching both the posted and enqueued lists.
+                    NotificationRecord r = findNotificationLocked(pkg, tag, id, userId);
                     if (r != null) {
                         // The notification was found, check if it should be removed.
 

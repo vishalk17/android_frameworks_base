@@ -230,7 +230,10 @@ public class LegacyResultMapper {
         {
             if (Parameters.FOCUS_MODE_INFINITY.equals(params.getFocusMode())) {
                 result.set(CaptureResult.LENS_FOCUS_DISTANCE, 0.0f);
-            }
+            } else {
+				/* TRONX2100 for MTK fix googlecamera startup */
+				result.set(CaptureResult.LENS_FOCUS_DISTANCE, 0.0f);
+			}
         }
 
         // lens.focalLength

@@ -3645,8 +3645,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             final int procCount = procs.size();
             for (int i = 0; i < procCount; i++) {
                 final int procUid = procs.keyAt(i);
-                if (UserHandle.isApp(procUid) || !UserHandle.isSameUser(procUid, uid)
-                        || UserHandle.isIsolated(procUid)) {
+                if (UserHandle.isApp(procUid) || !UserHandle.isSameUser(procUid, uid)) {
                     // Don't use an app process or different user process for system component.
                     continue;
                 }
@@ -4997,9 +4996,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                 userId, false, ALLOW_FULL_ONLY, "startActivityInPackage", null);
 
         // TODO: Switch to user app stacks here.
-        return mActivityStarter.startActivityMayWait(null, uid, ActivityStarter.PID_NULL, uid,
-                callingPackage, intent, resolvedType, null, null, resultTo, resultWho, requestCode,
-                startFlags, null, null, null, bOptions, false, userId, inTask, reason);
+        return mActivityStarter.startActivityMayWait(null, uid, callingPackage, intent,
+                resolvedType, null, null, resultTo, resultWho, requestCode, startFlags,
+                null, null, null, bOptions, false, userId, inTask, reason);
     }
 
     @Override
@@ -5019,20 +5018,13 @@ public class ActivityManagerService extends IActivityManager.Stub
     final int startActivitiesInPackage(int uid, String callingPackage,
             Intent[] intents, String[] resolvedTypes, IBinder resultTo,
             Bundle bOptions, int userId) {
-        return startActivitiesInPackage(uid, ActivityStarter.PID_NULL, UserHandle.USER_NULL,
-                callingPackage, intents, resolvedTypes, resultTo, bOptions, userId);
-    }
-
-    final int startActivitiesInPackage(int uid, int realCallingPid, int realCallingUid,
-                                       String callingPackage, Intent[] intents, String[] resolvedTypes,
-                                       IBinder resultTo, Bundle bOptions, int userId) {
 
         final String reason = "startActivityInPackage";
         userId = mUserController.handleIncomingUser(Binder.getCallingPid(), Binder.getCallingUid(),
                 userId, false, ALLOW_FULL_ONLY, reason, null);
         // TODO: Switch to user app stacks here.
-        int ret = mActivityStarter.startActivities(null, uid, realCallingPid, realCallingUid,
-                callingPackage, intents, resolvedTypes, resultTo, bOptions, userId, reason);
+        int ret = mActivityStarter.startActivities(null, uid, callingPackage, intents, resolvedTypes,
+                resultTo, bOptions, userId, reason);
         return ret;
     }
 

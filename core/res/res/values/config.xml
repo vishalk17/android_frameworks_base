@@ -424,7 +424,7 @@
           0 = Not available.
           1 = Available.
      -->
-    <integer translatable="false" name="config_wifi_wakeup_available">0</integer>
+    <integer translatable="false" name="config_wifi_wakeup_available">1</integer>
 
     <!-- Array of ConnectivityManager.TYPE_xxxx values allowable for tethering.
 
@@ -2932,7 +2932,7 @@
          animations. Note that this is only a default and will be overridden by a
          user-set value if toggled by settings so the "Transition animation scale" setting
          should also be hidden if intended to be permanent. -->
-    <item name="config_appTransitionAnimationDurationScaleDefault" format="float" type="dimen">1.0</item>
+    <item name="config_appTransitionAnimationDurationScaleDefault" format="float" type="dimen">0.5</item>
 
     <!-- Flag indicates that whether non-system apps can be installed on internal storage. -->
     <bool name="config_allow3rdPartyAppOnInternal">true</bool>
@@ -3089,4 +3089,10 @@
          booted.  -->
     <integer name="config_stableDeviceDisplayWidth">-1</integer>
     <integer name="config_stableDeviceDisplayHeight">-1</integer>
+    
+    <!-- Whether device ignores the RSSNR signal implementation -->
+	<bool name="config_ignoreRssnrSignalLevel">false</bool>
+ 
+    
+    
 </resources>

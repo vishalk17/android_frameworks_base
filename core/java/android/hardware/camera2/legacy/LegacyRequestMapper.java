@@ -45,7 +45,7 @@ public class LegacyRequestMapper {
     private static final boolean DEBUG = false;
 
     /** Default quality for android.jpeg.quality, android.jpeg.thumbnailQuality */
-    private static final byte DEFAULT_JPEG_QUALITY = 85;
+    private static final byte DEFAULT_JPEG_QUALITY = 90;
 
     /**
      * Set the legacy parameters using the {@link LegacyRequest legacy request}.
@@ -177,7 +177,12 @@ public class LegacyRequestMapper {
                 params.setPreviewFpsRange(rangeToApply[Camera.Parameters.PREVIEW_FPS_MIN_INDEX],
                         rangeToApply[Camera.Parameters.PREVIEW_FPS_MAX_INDEX]);
             } else {
-                Log.w(TAG, "Unsupported FPS range set [" + legacyFps[0] + "," + legacyFps[1] + "]");
+				 /* TRONX2100 for MTK 
+                Log.w(TAG, "Unsupported FPS range set [" + legacyFps[0] + "," + legacyFps[1] + "]"); */
+                int forcedmin=5000;
+                int forcedmax=60000;
+                params.setPreviewFpsRange(forcedmin,forcedmax);
+                Log.w(TAG,"Setting up FPS Rangs to 5000-60000");
             }
         }
 
@@ -229,7 +234,7 @@ public class LegacyRequestMapper {
                     /*defaultValue*/CONTROL_AF_MODE_OFF);
             String focusMode = LegacyMetadataMapper.convertAfModeToLegacy(afMode,
                     params.getSupportedFocusModes());
-
+			
             if (focusMode != null) {
                 params.setFocusMode(focusMode);
             }
@@ -279,7 +284,15 @@ public class LegacyRequestMapper {
                     /*defaultValue*/CONTROL_CAPTURE_INTENT_PREVIEW);
 
             captureIntent = filterSupportedCaptureIntent(captureIntent);
+            
+            /* TRONX2100 for MTK fixes Focus Problems on video records */
+            if (captureIntent == CONTROL_CAPTURE_INTENT_VIDEO_RECORD||captureIntent == CONTROL_CAPTURE_INTENT_VIDEO_SNAPSHOT){
+					String ForcefocusMode = "continuous-video";
+					params.setFocusMode(ForcefocusMode);
+					params.setVideoHDRMode("on");
+			}
 
+			
             params.setRecordingHint(
                     captureIntent == CONTROL_CAPTURE_INTENT_VIDEO_RECORD ||
                     captureIntent == CONTROL_CAPTURE_INTENT_VIDEO_SNAPSHOT);
@@ -292,8 +305,13 @@ public class LegacyRequestMapper {
                     params.isVideoStabilizationSupported(),
                     /*allowedValue*/CONTROL_VIDEO_STABILIZATION_MODE_OFF);
 
+            
             if (stabMode != null) {
-                params.setVideoStabilization(stabMode == CONTROL_VIDEO_STABILIZATION_MODE_ON);
+				/*TRONX2100 FOR mtk disable video stabilization for API2 because crashes */
+			    params.setVideoStabilization(false);
+			    Log.w(TAG,"videoStabilizationMode DISABLED!! FOR Camera Api2 on L861 in LegacyRequestMapper.java");
+                /* params.setVideoStabilization(stabMode == CONTROL_VIDEO_STABILIZATION_MODE_ON);
+                 * END tronx2100 */
             }
         }
 
@@ -453,6 +471,9 @@ public class LegacyRequestMapper {
                         "noiseReduction.mode = " + mode);
             }
         }
+        
+
+        
     }
 
     private static boolean checkForCompleteGpsData(Location location) {

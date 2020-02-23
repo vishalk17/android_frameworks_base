@@ -168,13 +168,24 @@ public class LegacyFaceDetectMapper {
             // Enable/disable face detection if it's changed since last time
             if (enableFaceDetect != mFaceDetectEnabled) {
                 if (enableFaceDetect) {
+					try {
                     mCamera.startFaceDetection();
-
+				} catch (Exception e) {
+					Log.v(TAG, "processFaceDetectMode - start face detection bypass");
+					
+					}
+					
                     if (DEBUG) {
                         Log.v(TAG, "processFaceDetectMode - start face detection");
                     }
                 } else {
+
+					try {
                     mCamera.stopFaceDetection();
+				} catch (Exception e) {
+					Log.v(TAG, "processFaceDetectMode - stop face detection bypass");
+					
+					}
 
                     if (DEBUG) {
                         Log.v(TAG, "processFaceDetectMode - stop face detection");

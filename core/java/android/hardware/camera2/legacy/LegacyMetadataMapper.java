@@ -1219,9 +1219,11 @@ public class LegacyMetadataMapper {
             CameraDevice.TEMPLATE_STILL_CAPTURE,
             CameraDevice.TEMPLATE_RECORD,
             // Disallowed templates in legacy mode:
-            // CameraDevice.TEMPLATE_VIDEO_SNAPSHOT,
-            // CameraDevice.TEMPLATE_ZERO_SHUTTER_LAG,
-            // CameraDevice.TEMPLATE_MANUAL
+            // re-enabled by TRONX2100 for MTK */
+            CameraDevice.TEMPLATE_VIDEO_SNAPSHOT,
+            CameraDevice.TEMPLATE_ZERO_SHUTTER_LAG,
+            CameraDevice.TEMPLATE_MANUAL
+            /*end TRONX2100 */
     };
 
     /**
@@ -1303,6 +1305,17 @@ public class LegacyMetadataMapper {
                 case CameraDevice.TEMPLATE_RECORD:
                     captureIntent = CONTROL_CAPTURE_INTENT_VIDEO_RECORD;
                     break;
+                /* TRONX2100 added for MTK */
+                case CameraDevice.TEMPLATE_VIDEO_SNAPSHOT:
+                    captureIntent = CONTROL_CAPTURE_INTENT_VIDEO_SNAPSHOT;
+                    break;
+                case CameraDevice.TEMPLATE_ZERO_SHUTTER_LAG:
+					captureIntent =  CONTROL_CAPTURE_INTENT_ZERO_SHUTTER_LAG;
+					break;
+				case CameraDevice.TEMPLATE_MANUAL:
+					captureIntent =  CONTROL_CAPTURE_INTENT_MANUAL;
+					break;
+				/* TRONX2100 added for MTK end */
                 default:
                     // Can't get anything else since it's guarded by the IAE check
                     throw new AssertionError("Impossible; keep in sync with sAllowedTemplates");

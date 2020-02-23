@@ -80,8 +80,8 @@ public class RequestThreadManager {
     private static final int MAX_IN_FLIGHT_REQUESTS = 2;
 
     private static final int PREVIEW_FRAME_TIMEOUT = 1000; // ms
-    private static final int JPEG_FRAME_TIMEOUT = 4000; // ms (same as CTS for API2)
-    private static final int REQUEST_COMPLETE_TIMEOUT = JPEG_FRAME_TIMEOUT;
+    private static final int JPEG_FRAME_TIMEOUT = 20000; // because HDR!!! TRONX2100 for MTK  ms (same as CTS for API2)
+    private static final int REQUEST_COMPLETE_TIMEOUT = 2000; // TRONX2100 for MTK JPEG_FRAME_TIMEOUT;
 
     private static final float ASPECT_RATIO_TOLERANCE = 0.01f;
     private boolean mPreviewRunning = false;
@@ -242,6 +242,8 @@ public class RequestThreadManager {
                     }
                 } catch (LegacyExceptionUtils.BufferQueueAbandonedException e) {
                     Log.w(TAG, "Surface abandoned, dropping frame. ", e);
+                } catch (IllegalArgumentException e) {
+                    Log.w(TAG, "no valid native surface, dropping frame. ", e);
                 }
             }
 
@@ -526,7 +528,7 @@ public class RequestThreadManager {
                 mDeviceState.setError(
                         CameraDeviceImpl.CameraDeviceCallbacks.ERROR_CAMERA_DEVICE);
 
-        }
+        }        
     }
 
     private void resetJpegSurfaceFormats(Collection<Surface> surfaces) {
@@ -711,6 +713,7 @@ public class RequestThreadManager {
                     }
 
                     configureOutputs(config.surfaces);
+                    
                     config.condition.open();
                     if (DEBUG) {
                         long totalTime = SystemClock.elapsedRealtimeNanos() - startTime;

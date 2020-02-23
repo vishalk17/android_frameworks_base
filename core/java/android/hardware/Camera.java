@@ -174,6 +174,23 @@ public class Camera {
     private OnZoomChangeListener mZoomListener;
     private FaceDetectionListener mFaceListener;
     private ErrorCallback mErrorCallback;
+
+    // MTK
+    // Continuous shot done
+    private ContinuousShotCallback mCSDoneCallback;
+    // ZSD preview done
+    private ZSDPreviewDone mPreviewDoneCallback;
+    
+    //ASD
+    private AsdCallback mAsdCallback;
+    
+    private SmileCallback mSmileCallback;
+    private GestureCallback mGestureCallback;
+    
+    private DistanceInfoCallback mDistanceInfoCallback;
+    
+    // End MTK  
+    
     private boolean mOneShot;
     private boolean mWithBuffer;
     private boolean mFaceDetectionRunning = false;
@@ -191,6 +208,82 @@ public class Camera {
     private CameraDataCallback mCameraDataCallback;
     private CameraMetaDataCallback mCameraMetaDataCallback;
     /* ### QC ADD-ONS: END */
+
+	/* TRONX2100 save latest CameraId*/
+    private static int mCameraIdLatest = 0;
+    private static boolean mDisableVideoHint = false;
+    //!++
+    private static final int MTK_CAMERA_MSG_EXT_NOTIFY   = 0x40000000;  //  extended notify message
+    private static final int MTK_CAMERA_MSG_EXT_DATA     = 0x80000000;  //  extended data message
+    //!--
+    //!++
+    //
+    // Extended notify message (MTK_CAMERA_MSG_EXT_NOTIFY)
+    // These match the enums in frameworks/av/include/camera/MtkCamera.h
+    //
+    // Smile Detection
+    private static final int MTK_CAMERA_MSG_EXT_NOTIFY_SMILE_DETECT     = 0x00000001;
+    //
+    // Auto Scene Detection
+    private static final int MTK_CAMERA_MSG_EXT_NOTIFY_ASD              = 0x00000002;
+    //
+    // Multi Angle View
+    private static final int MTK_CAMERA_MSG_EXT_NOTIFY_MAV              = 0x00000003;
+    //
+    // Burst Shutter Callback
+    //  ext2: 0:not the last one, 1:the last one
+    private static final int MTK_CAMERA_MSG_EXT_NOTIFY_BURST_SHUTTER    = 0x00000004;
+    //
+    // End notify for Continuous shot
+    private static final int MTK_CAMERA_MSG_EXT_NOTIFY_CONTINUOUS_END   = 0x00000006;
+    //
+    // Last preview frame showed when capture in ZSD mode
+    private static final int MTK_CAMERA_MSG_EXT_NOTIFY_ZSD_PREVIEW_DONE = 0x00000007;
+    //
+    // Raw Dump mode Stopped
+    private static final int MTK_CAMERA_MSG_EXT_NOTIFY_RAW_DUMP_STOPPED  = 0x00000012;
+    //
+    // Gesture Detection
+    private static final int MTK_CAMERA_MSG_EXT_NOTIFY_GESTURE_DETECT  = 0x00000013;
+
+    // Stereo Feature: warning message
+    private static final int MTK_CAMERA_MSG_EXT_NOTIFY_STEREO_WARNING  = 0x00000014;
+
+    // Stereo Feature: distance value
+    private static final int MTK_CAMERA_MSG_EXT_NOTIFY_STEREO_DISTANCE = 0x00000015;
+
+    //
+    //--------------------------------------------------------------------------
+    //
+    // Extended data message (MTK_CAMERA_MSG_EXT_DATA)
+    // These match the enums in mediatek/frameworks-ext/av/include/camera/MtkCamera.h
+    //
+    // Auto Panorama
+    //  int[0]: 0:mAutoRamaMoveCallback, 1:mAutoRamaCallback
+    //  int[1~]:depends on
+    private static final int MTK_CAMERA_MSG_EXT_DATA_AUTORAMA           = 0x00000001;
+    //
+    // AF Window Results
+    private static final int MTK_CAMERA_MSG_EXT_DATA_AF                 = 0x00000002;
+    //
+    // Burst Shot (EV Shot)
+    //  int[0]: the total shut count.
+    //  int[1]: count-down shut number; 0: the last one shut.
+    private static final int MTK_CAMERA_MSG_EXT_DATA_BURST_SHOT         = 0x00000003;
+    private static final int MTK_CAMERA_MSG_EXT_DATA_OT                 = 0x00000005;
+
+    //
+    //
+    //FB
+    private static final int MTK_CAMERA_MSG_EXT_DATA_FACEBEAUTY         = 0x00000006;
+    //
+    //MAV
+    private static final int MTK_CAMERA_MSG_EXT_DATA_MAV                = 0x00000007;
+    //
+    //HDR
+    private static final int MTK_CAMERA_MSG_EXT_DATA_HDR                = 0x00000008;
+    //
+    //!--
 
     /**
      * Broadcast Action:  A new picture is taken by the camera, and the entry of
@@ -437,6 +530,8 @@ public class Camera {
      * @see android.app.admin.DevicePolicyManager#getCameraDisabled(android.content.ComponentName)
      */
     public static Camera open(int cameraId) {
+		mCameraIdLatest = cameraId;
+		mDisableVideoHint = false;
         return new Camera(cameraId);
     }
 
@@ -455,6 +550,8 @@ public class Camera {
         for (int i = 0; i < numberOfCameras; i++) {
             getCameraInfo(i, cameraInfo);
             if (cameraInfo.facing == CameraInfo.CAMERA_FACING_BACK) {
+                mCameraIdLatest = i;
+                mDisableVideoHint = false;
                 return new Camera(i);
             }
         }
@@ -503,7 +600,8 @@ public class Camera {
         if (halVersion < CAMERA_HAL_API_VERSION_1_0) {
             throw new IllegalArgumentException("Invalid HAL version " + halVersion);
         }
-
+		mCameraIdLatest = cameraId;
+		mDisableVideoHint = false;
         return new Camera(cameraId, halVersion);
     }
 
@@ -555,6 +653,7 @@ public class Camera {
         mCameraMetaDataCallback = null;
         /* ### QC ADD-ONS: END */
 
+
         Looper looper;
         if ((looper = Looper.myLooper()) != null) {
             mEventHandler = new EventHandler(this, looper);
@@ -562,6 +661,22 @@ public class Camera {
             mEventHandler = new EventHandler(this, looper);
         } else {
             mEventHandler = null;
+        }
+
+	
+		String packageName = ActivityThread.currentOpPackageName();
+        //Force HAL1 if the package name falls in this bucket
+        String packageList = SystemProperties.get("camera.hal1.packagelist", "");
+        if (packageList.length() > 0) {
+            TextUtils.StringSplitter splitter = new TextUtils.SimpleStringSplitter(',');
+            splitter.setString(packageList);
+            for (String str : splitter) {
+                if (packageName.equals(str)) {
+					Log.i(TAG,"FORCED HAL1 for Package: "+packageName);
+                    halVersion = CAMERA_HAL_API_VERSION_1_0;
+                    break;
+                }
+            }
         }
 
         return native_setup(new WeakReference<Camera>(this), cameraId, halVersion,
@@ -1199,6 +1314,10 @@ public class Camera {
 
         @Override
         public void handleMessage(Message msg) {
+			//!++
+            // For debug
+            Log.i(TAG, "handleMessage: " + String.format("#%x", msg.what));
+            //!--
             switch(msg.what) {
             case CAMERA_MSG_SHUTTER:
                 if (mShutterCallback != null) {
@@ -1294,8 +1413,59 @@ public class Camera {
                 }
                 return;
             /* ### QC ADD-ONS: END */
+            
+            case MTK_CAMERA_MSG_EXT_NOTIFY:
+                Log.i(TAG, "handleMessage MTK EXT: " + String.format("#%x", msg.arg1));
+                switch(msg.arg1) {
+				case MTK_CAMERA_MSG_EXT_NOTIFY_SMILE_DETECT:
+                    if (mSmileCallback != null) {
+                        mSmileCallback.onSmile();
+                    }
+                    break;
+
+                case MTK_CAMERA_MSG_EXT_NOTIFY_GESTURE_DETECT:
+                    if (mGestureCallback != null) {
+                        mGestureCallback.onGesture();
+                    }
+                    break;
+
+                case MTK_CAMERA_MSG_EXT_NOTIFY_ASD:
+                    if (mAsdCallback != null) {
+                        mAsdCallback.onDetected(msg.arg2);
+                    }
+                    break;
+					
+                case MTK_CAMERA_MSG_EXT_NOTIFY_CONTINUOUS_END:
+                    if (mCSDoneCallback != null) {
+                        mCSDoneCallback.onConinuousShotDone(msg.arg2);
+                    }
+                    break;
+                case MTK_CAMERA_MSG_EXT_NOTIFY_ZSD_PREVIEW_DONE:
+                    if (mPreviewDoneCallback != null) {
+                        mPreviewDoneCallback.onPreviewDone();
+                    }
+                    break;
+                case MTK_CAMERA_MSG_EXT_NOTIFY_STEREO_DISTANCE:
+                    if (mDistanceInfoCallback != null) {
+                        String info = String.valueOf(msg.arg2);
+                        if (info != null) {
+                            Log.i(TAG, "Distance info: Info = " + info);
+                            mDistanceInfoCallback.onInfo(info);
+                        }
+                    }
+                    break;
+				default:
+                Log.e(TAG, "Unknown MTK message type " + String.format("#%x", msg.what)+"  EXT MSG: "+String.format("#%x", msg.arg1));
+                return;
+                }
+            case MTK_CAMERA_MSG_EXT_DATA:
+                switch(msg.arg1) {
+				
+				default:
+				Log.i(TAG, "unknown MTK EXT_DATA: " + String.format("#%x", msg.arg1));	
+				}
             default:
-                Log.e(TAG, "Unknown message type " + msg.what);
+                Log.e(TAG, "Unknown message type " + String.format("#%x", msg.what));
                 return;
             }
         }
@@ -1856,11 +2026,14 @@ public class Camera {
      * @see Parameters#getMaxNumDetectedFaces()
      */
     public final void startFaceDetection() {
+		/* disable FACEDETECTION BY TRONX21000 for MTK L861 
         if (mFaceDetectionRunning) {
             throw new RuntimeException("Face detection is already running");
         }
-        _startFaceDetection(CAMERA_FACE_DETECTION_HW);
-        mFaceDetectionRunning = true;
+         _startFaceDetection(CAMERA_FACE_DETECTION_HW); */
+        /* _stopFaceDetection(); */
+        /* mFaceDetectionRunning = true; */
+        
     }
 
     /**
@@ -1869,8 +2042,9 @@ public class Camera {
      * @see #startFaceDetection()
      */
     public final void stopFaceDetection() {
-        _stopFaceDetection();
-        mFaceDetectionRunning = false;
+		/* disable FACEDETECTION BY TRONX21000 for MTK L861 */
+        /* _stopFaceDetection(); */
+        /* mFaceDetectionRunning = false; */
     }
 
     private native final void _startFaceDetection(int type);
@@ -2032,6 +2206,253 @@ public class Camera {
         mErrorCallback = cb;
     }
 
+// MTK
+
+    /**
+     * @hide
+     * An interface which contains a callback for the detection of a smile
+     */
+    public interface SmileCallback
+    {
+        /**
+         * @internal
+         * Callback for smile detected
+         */
+        void onSmile();
+    }
+
+    /**
+     * @hide
+     * An interface which contains a callback for the detection of a gesture
+     */
+    public interface GestureCallback
+    {
+        /**
+         * @internal
+         * Callback for gesture detected
+         *
+         */
+        void onGesture();
+    }
+
+
+    /**
+     * @hide
+     * An interface which contains a callback for stere Camera Distance Info
+     */
+    public interface DistanceInfoCallback
+    {
+        /**
+         * @internal
+         * @param info distance info
+         */
+        void onInfo(String info);
+    }
+    
+    /**
+     * @hide
+     *
+     * Registers a callback to be invoke when Distance info is taken
+     * @param cb the callback to run
+     */
+    public final void setDistanceInfoCallback(DistanceInfoCallback cb)
+    {
+        mDistanceInfoCallback = cb;
+    }
+
+    /**
+     * @hide
+     * @internal
+     *
+     * Registers a callback to be invoked when a smile face is detected
+     * @param cb the callback to run
+     */
+    public final void setSmileCallback(SmileCallback cb)
+    {
+        mSmileCallback = cb;
+    }
+
+    /**
+     * @hide
+     * @internal
+     * Registers a callback to be invoked when a gesture is detected
+     * @param cb the callback to run
+     */
+    public final void setGestureCallback(GestureCallback cb)
+    {
+        mGestureCallback = cb;
+    }
+    
+        /**
+     * @hide
+     * @internal
+     *
+     * Start the SD (smile detection) preview mode.
+     *
+     * During the SD preview mode, the applications can call stopSmileDetection to
+     * leave the SD preview mode and then to return to the normal preview mode.
+     *
+     * During the SD preview mode, it will return to the normal preview mode
+     * automatically if the applications call takePicture. In this case, a call
+     * to stopSmileDetection is not needed.
+     *
+     * During the SD preview mode, if any smile is detected, a callback to the
+     * applications will be invoked. And then the applications should call
+     * takePicture, which is illustrated as above.
+     *
+     * @throws RuntimeException if the method fails.
+     */
+    public void startSmileDetection() {
+        startSDPreview();
+    }
+
+    private native void startSDPreview();
+
+    /**
+     * @hide
+     * @internal
+     *
+     * Cancel the SD (smile detection) preview mode.
+     *
+     * During the SD preview mode, the applications can call stopSmileDetection to
+     * leave the SD preview mode and then to return to the normal preview mode.
+     * Otherwise, do not call this method.
+     *
+     * @throws RuntimeException if the method fails.
+     */
+    public void stopSmileDetection() {
+        cancelSDPreview();
+    }
+
+    private native void cancelSDPreview();
+
+    /**
+     * @hide
+     * @internal
+     * Start the GD (gesture detection) preview mode.
+     *
+     * During the GD preview mode, the applications can call stopGestureDetection to
+     * leave the GD preview mode and then to return to the normal preview mode.
+     *
+     * During the GD preview mode, it will return to the normal preview mode
+     * automatically if the applications call takePicture. In this case, a call
+     * to stopGestureDetection is not needed.
+     *
+     * During the GD preview mode, if any gesture is detected, a callback to the
+     * applications will be invoked. And then the applications should call
+     * takePicture, which is illustrated as above.
+     *
+     * @throws RuntimeException if the method fails.
+     */
+    public void startGestureDetection() {
+        startGDPreview();
+    }
+
+    private native void startGDPreview();
+
+    /**
+     * @hide
+     * @internal
+     * Cancel the GD (gesture detection) preview mode.
+     *
+     * During the GD preview mode, the applications can call stopGestureDetection to
+     * leave the GD preview mode and then to return to the normal preview mode.
+     * Otherwise, do not call this method.
+     *
+     * @throws RuntimeException if the method fails.
+     */
+    public void stopGestureDetection() {
+        cancelGDPreview();
+    }
+
+    private native void cancelGDPreview();
+    
+    /**
+     * @hide
+     * @internal
+     *
+     * Cancel continuous shot
+     */
+    public native void cancelContinuousShot();
+    
+    /**
+     * @hide
+     * @internal
+     * @param speed : the speed set for continuous shot
+     * set speed of continuous shot(xx fps)
+     */
+    public native void setContinuousShotSpeed(int speed);
+
+    //ASD
+  /**
+    * @hide
+    * An interface which contains a callback for the auto scene detection
+    */
+    public interface AsdCallback
+    {
+        /**
+          * @internal
+          * @param scene the scene detected
+          */
+        void onDetected(int scene);
+    }
+
+    /**
+     * @hide
+     * @internal
+     *
+     * Registers a callback to be invoked when auto scene is detected
+     * @param cb the callback to run
+     */
+    public final void setAsdCallback(AsdCallback cb)
+    {
+        mAsdCallback = cb;
+    }
+
+
+    /**
+     * @hide
+     * An interface which contains a callback for the zero shutter delay preview
+     */
+    public interface ZSDPreviewDone {
+        public void onPreviewDone();
+    }
+
+    /**
+     * @hide
+     * An interface which contains a callback for the continuous shot
+     */
+    public interface ContinuousShotCallback {
+      /**
+        * @internal
+        * @param capture number
+        */
+        public void onConinuousShotDone(int capNum);
+    }
+
+    /**
+     * @hide
+     * @internal
+     * Registers a callback to be invoked when continuous shot is done
+     * @param ContinuousShotCallback
+     */
+    public void setContinuousShotCallback(ContinuousShotCallback callback) {
+        mCSDoneCallback = callback;
+    }
+
+    /**
+     * @hide
+     * @internal
+     * Registers a callback to be invoked when a preview frame is done
+     * @param ZSDPreviewDone
+     */
+    public void setPreviewDoneCallback(ZSDPreviewDone callback) {
+        mPreviewDoneCallback = callback;
+    }
+
+// End MTK
+
+
     private native final void native_setParameters(String params);
     private native final String native_getParameters();
 
@@ -2175,8 +2596,12 @@ public class Camera {
      */
     public final void setMetadataCb(CameraMetaDataCallback cb)
     {
+        try {
         mCameraMetaDataCallback = cb;
         native_setMetadataCb(cb!=null);
+		}catch(Exception e){
+			Log.w(TAG,"Error in setMetadataCb");
+		}
     }
     private native final void native_setMetadataCb(boolean mode);
 
@@ -2489,6 +2914,21 @@ public class Camera {
         private static final String KEY_VIDEO_SNAPSHOT_SUPPORTED = "video-snapshot-supported";
         private static final String KEY_VIDEO_STABILIZATION = "video-stabilization";
         private static final String KEY_VIDEO_STABILIZATION_SUPPORTED = "video-stabilization-supported";
+
+
+		// MTK
+		
+		private static final String KEY_CAPTURE_MODE = "cap-mode";
+        private static final String KEY_CAPTURE_PATH = "capfname";
+        private static final String KEY_BURST_SHOT_NUM = "burst-num";
+        private static final String KEY_MATV_PREVIEW_DELAY = "tv-delay";
+        private static final String KEY_SENSOR_DEV = "sensor-dev";
+        private static final String KEY_EIS_MODE = "eis-mode";
+        private static final String KEY_AFLAMP_MODE = "aflamp-mode";
+        private static final String KEY_ZSD_MODE = "zsd-mode";
+        private static final String KEY_CONTINUOUS_SPEED_MODE = "continuous-shot-speed";
+        //
+        private static final String KEY_ZSD_SUPPORTED = "zsd-supported";
 
         // Parameter key suffix for supported values.
         private static final String SUPPORTED_VALUES_SUFFIX = "-values";
@@ -2944,6 +3384,40 @@ public class Camera {
              * that key to be ordered the latest in the map.
              */
             mMap.remove(key);
+           
+           
+
+           
+            //debugparam
+            
+           //Log.i(TAG, "CAMDB: KEY "+ key  + " " + value);
+            
+            /*
+			if (key.equals(KEY_QC_CAMERA_MODE)){
+				value="0";
+			} */
+			
+			
+            if (key.equals(KEY_VIDEO_SIZE) && (value.equals("3840x2160") || value.equals("3840x2176"))  && mCameraIdLatest == 1){
+				String rh = get(KEY_RECORDING_HINT);
+				if (rh == null || rh.equals("") ){
+				     mDisableVideoHint = true;
+				}else{
+					//Log.i(TAG, "FrontCamera Recording Hint fix");
+					mMap.remove(KEY_RECORDING_HINT);
+				    mMap.put(KEY_RECORDING_HINT,"false");
+				    mMap.remove("video-hdr");
+				    mMap.put("video-hdr","off");
+				    mDisableVideoHint = true;	
+				}
+			} else if (key.equals(KEY_RECORDING_HINT) && mDisableVideoHint == true){
+				//Log.i(TAG, "FrontCamera Recording Hint fix 2");
+				value = "false";
+				//mDisableVideoHint = false;
+			} else if (key.equals(KEY_RECORDING_HINT)) {
+				value="true";
+			}
+            
             mMap.put(key, value);
         }
 
@@ -2979,8 +3453,71 @@ public class Camera {
          * @return the String value of the parameter
          */
         public String get(String key) {
+			
+			if (mCameraIdLatest == 1){ // fix frontvideo resolution
+			String packageName = ActivityThread.currentOpPackageName();
+			if (packageName.equals("com.google.android.GoogleCamera") || packageName.equals("com.android.camera2")){
+			 if (!mMap.get(KEY_PREVIEW_SIZE).equals("1280x720")){
+				 mMap.remove(KEY_PREVIEW_SIZE);
+				 mMap.put(KEY_PREVIEW_SIZE,"1280x720");
+			  }	
+			}
+		    }
+			
+			
             return mMap.get(key);
         }
+
+
+
+        private void setTF(String key, String value) {
+            if (key.indexOf('=') != -1 || key.indexOf(';') != -1 || key.indexOf(0) != -1) {
+                Log.e(TAG, "Key \"" + key + "\" contains invalid character (= or ; or \\0)");
+                return;
+            }
+            if (value.indexOf('=') != -1 || value.indexOf(';') != -1 || value.indexOf(0) != -1) {
+                Log.e(TAG, "Value \"" + value + "\" contains invalid character (= or ; or \\0)");
+                return;
+            }
+			switch (value) {
+				case "0":
+					value="low";
+					break;
+				case "1":
+					value="middle";
+					break;
+				case "2":
+					value="high";
+					break;
+				default:
+					value="middle";
+					break;	
+				}
+		    Log.d(TAG,"Supported : " + key + " set to " + value + " ");
+            put(key, value);
+        }
+        
+
+		private int getTFInt(String key) {
+			String v = mMap.get(key);
+			int r = 0;
+			switch (v) {
+				case "low":
+					r=0;
+					break;
+				case "middle":
+					r=1;
+					break;
+				case "high":
+					r=2;
+					break;
+				default:
+					r=1;
+					break;
+				}
+			return r;
+		}
+
 
         /**
          * Returns the value of an integer parameter.
@@ -2991,6 +3528,87 @@ public class Camera {
         public int getInt(String key) {
             return Integer.parseInt(mMap.get(key));
         }
+
+
+// MTK
+	/**
+	 * @hide
+	 */
+	public String getCaptureMode() {
+		return get(KEY_CAPTURE_MODE);
+	}
+	/**
+	 * @hide
+	 * @param value: CAPTURE_MODE_NORMAL, CAPTURE_MODE_BEST_SHOT,
+	 *        CAPTURE_MODE_EV_BRACKET_SHOT, CAPTURE_MODE_BURST_SHOT,
+	 *        CAPTURE_MODE_SMILE_SHOT, CAPTURE_MODE_PANORAMA_SHOT
+	 */
+	public void setCaptureMode(String value) {
+		set(KEY_CAPTURE_MODE, value);
+	}
+	/**
+	 * @hide
+	 * @return the supported capture mode
+	 * get all supported capture mode
+	 */
+	public List<String> getSupportedCaptureMode() {
+		String str = get(KEY_CAPTURE_MODE + SUPPORTED_VALUES_SUFFIX);
+		return split(str);
+	}
+	/**
+	 * @hide
+	 * @param   value: file path, if file path is /sdcard/DCIM/cap00, the output file
+	 * will be cap00, cap01, cap02, ...
+	 * set the storage path for capture image store
+	 */
+	public void setCapturePath(String value) {
+		if (value == null) {
+			remove(KEY_CAPTURE_PATH);
+		} else {
+			set(KEY_CAPTURE_PATH, value);
+		}
+	}
+
+	/**
+	 * @hide
+	 * @param  value: should be 4 / 8 / 16
+	 * set the burst shot number
+	 */
+	public void setBurstShotNum(int value) {
+		set(KEY_BURST_SHOT_NUM, value);
+		if (value <= 1){
+			set(KEY_CAPTURE_MODE ,"normal");
+		} else {
+			set(KEY_CAPTURE_MODE ,"continuousshot");
+		}
+	}
+	/**
+	 * @hide
+	 * @return the ZSD mode
+	 * get the ZSD mode
+	 */
+	public String getZSDMode() {
+		return get(KEY_ZSD_MODE);
+	}
+	/**
+	 * @hide
+	 * Sets ZSD mode on/off
+	 * @param value "on" or "off"
+	 */
+	public void setZSDMode(String value) {
+		set(KEY_ZSD_MODE, value);
+	}
+	/**
+	 * @hide
+	 * @return the supported ZSD mode
+	 * get all supported ZSD mode
+	 */
+	public List<String> getSupportedZSDMode() {
+		String str = get(KEY_ZSD_MODE + SUPPORTED_VALUES_SUFFIX);
+		return split(str);
+	}
+
+// End
 
         /**
          * Sets the dimensions for preview pictures. If the preview has already
@@ -3331,6 +3949,13 @@ public class Camera {
          * @see #setPreviewFormat
          */
         public List<Integer> getSupportedPreviewFormats() {
+			if ( mCameraIdLatest == 0 ){
+			    //set(KEY_PREVIEW_SIZE + SUPPORTED_VALUES_SUFFIX,"176x144,320x240,352x288,480x320,480x368,640x480,720x480,800x480,864x480,960x540,1280x720,1440x1080,1920x1080,1920x1088,1920x1440,2560x1440,2560x1920");
+			    set(KEY_PICTURE_SIZE + SUPPORTED_VALUES_SUFFIX,"320x240,640x480,1024x768,1280x720,1280x768,1280x960,1600x912,1600x1200,2048x1536,2048x1152,2560x1440,2560x1920,2880x1728,3264x2448,3328x1872,3600x2160,3672x2754,3584x2016,4608x2592,4864x2736,4096x3072,4160x3120,5120x2880,5120x3840,6144x3456,5312x3984,7952x4480,7536x5648");
+			}else{
+				//set(KEY_PREVIEW_SIZE + SUPPORTED_VALUES_SUFFIX,"176x144,320x240,352x288,480x320,480x368,640x480,720x480,800x480,800x600,864x480,960x540,1280x720,1440x1080,1920x1080,2560x1440");
+			    set(KEY_PICTURE_SIZE + SUPPORTED_VALUES_SUFFIX,"320x240,640x480,1024x768,1280x720,1280x768,1280x960,1600x912,1600x1200,2048x1536,2048x1152,2560x1440,2560x1920,2880x1728,3264x2448,3328x1872,3600x2160,3672x2754,3584x2016,4608x2592,4864x2736,4096x3072,4160x3120,5120x2880,5120x3840,6144x3456,5312x3984");
+			}
             String str = get(KEY_PREVIEW_FORMAT + SUPPORTED_VALUES_SUFFIX);
             ArrayList<Integer> formats = new ArrayList<Integer>();
             for (String s : split(str)) {
@@ -3375,6 +4000,13 @@ public class Camera {
          *         return a list with at least one element.
          */
         public List<Size> getSupportedPictureSizes() {
+			if ( mCameraIdLatest == 0 ){
+			   // set(KEY_PREVIEW_SIZE + SUPPORTED_VALUES_SUFFIX,"176x144,320x240,352x288,480x320,480x368,640x480,720x480,800x480,800x600,864x480,960x540,1280x720,1440x1080,1920x1080,1920x1088,1920x1440,2560x1440,2560x1920");
+			    set(KEY_PICTURE_SIZE + SUPPORTED_VALUES_SUFFIX,"320x240,640x480,1024x768,1280x720,1280x768,1280x960,1600x912,1600x1200,2048x1536,2048x1152,2560x1440,2560x1920,2880x1728,3264x2448,3328x1872,3600x2160,3672x2754,3584x2016,4608x2592,4864x2736,4096x3072,4160x3120,5120x2880,5120x3840,6144x3456,5312x3984,7952x4480,7536x5648");
+			}else{
+			   // set(KEY_PREVIEW_SIZE + SUPPORTED_VALUES_SUFFIX,"176x144,320x240,352x288,480x320,480x368,640x480,720x480,800x480,800x600,864x480,960x540,1280x720,1440x1080,1920x1080,2560x1440");
+			    set(KEY_PICTURE_SIZE + SUPPORTED_VALUES_SUFFIX,"320x240,640x480,1024x768,1280x720,1280x768,1280x960,1600x912,1600x1200,2048x1536,2048x1152,2560x1440,2560x1920,2880x1728,3264x2448,3328x1872,3600x2160,3672x2754,3584x2016,4608x2592,4864x2736,4096x3072,4160x3120,5120x2880,5120x3840,6144x3456,5312x3984");
+			}
             String str = get(KEY_PICTURE_SIZE + SUPPORTED_VALUES_SUFFIX);
             return splitSize(str);
         }
@@ -3805,7 +4437,14 @@ public class Camera {
          * @see #getFlashMode()
          */
         public List<String> getSupportedFlashModes() {
-            String str = get(KEY_FLASH_MODE + SUPPORTED_VALUES_SUFFIX);
+            //String str = get(KEY_FLASH_MODE + SUPPORTED_VALUES_SUFFIX);
+            String str = "";
+            /* TRONX2100 fake Flash Mode for HDR BACK Camera */
+            if (mCameraIdLatest == CameraInfo.CAMERA_FACING_BACK){
+               str = "off,on,auto,red-eye,torch";
+		    } else {
+			   str = get("off");
+			}
             return split(str);
         }
 
@@ -4413,7 +5052,11 @@ public class Camera {
          * @see #getVideoStabilization()
          */
         public void setVideoStabilization(boolean toggle) {
-            set(KEY_VIDEO_STABILIZATION, toggle ? TRUE : FALSE);
+			
+            //set(KEY_VIDEO_STABILIZATION, toggle ? TRUE : FALSE);
+            
+            setVideoHDRMode(toggle ? "on" : "off");
+
         }
 
         /**
@@ -4437,7 +5080,7 @@ public class Camera {
          * @see #setVideoStabilization(boolean)
          * @see #getVideoStabilization()
          */
-        public boolean isVideoStabilizationSupported() {
+        public boolean isVideoStabilizationSupported() { 
             String str = get(KEY_VIDEO_STABILIZATION_SUPPORTED);
             return TRUE.equals(str);
         }
@@ -4501,7 +5144,9 @@ public class Camera {
                 return Float.parseFloat(mMap.get(key));
             } catch (NumberFormatException ex) {
                 return defaultValue;
-            }
+            } catch (NullPointerException ex) {
+				return defaultValue;
+			}
         }
 
         // Returns the value of a integer parameter.
@@ -4510,7 +5155,9 @@ public class Camera {
                 return Integer.parseInt(mMap.get(key));
             } catch (NumberFormatException ex) {
                 return defaultValue;
-            }
+            } catch (NullPointerException ex) {
+               return defaultValue;
+		    }
         }
 
         // Splits a comma delimited string to an ArrayList of Size.
@@ -4628,8 +5275,8 @@ public class Camera {
         private static final String KEY_QC_TOUCH_INDEX_AF = "touch-index-af";
         private static final String KEY_QC_MANUAL_FOCUS_POSITION = "manual-focus-position";
         private static final String KEY_QC_MANUAL_FOCUS_POS_TYPE = "manual-focus-pos-type";
-        private static final String KEY_QC_SCENE_DETECT = "scene-detect";
-        private static final String KEY_QC_ISO_MODE = "iso";
+        private static final String KEY_QC_SCENE_DETECT = "cap-mode";
+        private static final String KEY_QC_ISO_MODE = "iso-speed";
         private static final String KEY_QC_EXPOSURE_TIME = "exposure-time";
         private static final String KEY_QC_MIN_EXPOSURE_TIME = "min-exposure-time";
         private static final String KEY_QC_MAX_EXPOSURE_TIME = "max-exposure-time";
@@ -4637,8 +5284,9 @@ public class Camera {
         private static final String KEY_QC_HISTOGRAM = "histogram";
         private static final String KEY_QC_SKIN_TONE_ENHANCEMENT = "skinToneEnhancement";
         private static final String KEY_QC_AUTO_EXPOSURE = "auto-exposure";
-        private static final String KEY_QC_SHARPNESS = "sharpness";
+        private static final String KEY_QC_SHARPNESS = "edge";
         private static final String KEY_QC_MAX_SHARPNESS = "max-sharpness";
+        private static final String KEY_QC_BRIGHTNESS = "brightness";
         private static final String KEY_QC_CONTRAST = "contrast";
         private static final String KEY_QC_MAX_CONTRAST = "max-contrast";
         private static final String KEY_QC_SATURATION = "saturation";
@@ -4650,7 +5298,7 @@ public class Camera {
         private static final String KEY_QC_MEMORY_COLOR_ENHANCEMENT = "mce";
         private static final String KEY_QC_REDEYE_REDUCTION = "redeye-reduction";
         private static final String KEY_QC_ZSL = "zsl";
-        private static final String KEY_QC_CAMERA_MODE = "camera-mode";
+        private static final String KEY_QC_CAMERA_MODE = "mtk-cam-mode";
         private static final String KEY_QC_VIDEO_HIGH_FRAME_RATE = "video-hfr";
         private static final String KEY_QC_VIDEO_HDR = "video-hdr";
         private static final String KEY_QC_POWER_MODE = "power-mode";
@@ -4914,7 +5562,9 @@ public class Camera {
          *         with at least one element.
          */
          public List<Size> getSupportedHfrSizes() {
-            String str = get(KEY_QC_HFR_SIZE + SUPPORTED_VALUES_SUFFIX);
+            //String str = get(KEY_QC_HFR_SIZE + SUPPORTED_VALUES_SUFFIX);
+            //return splitSize(str);
+            String str = "0x0,1280x720";
             return splitSize(str);
          }
 
@@ -5056,7 +5706,9 @@ public class Camera {
          *         setting is not supported.
          */
          public List<String> getSupportedVideoHighFrameRateModes() {
-            String str = get(KEY_QC_VIDEO_HIGH_FRAME_RATE + SUPPORTED_VALUES_SUFFIX);
+            //String str = get(KEY_QC_VIDEO_HIGH_FRAME_RATE + SUPPORTED_VALUES_SUFFIX);
+            //return split(str);
+            String str = "off,120";
             return split(str);
          }
 
@@ -5103,7 +5755,9 @@ public class Camera {
          *
          */
          public List<String> getSupportedFaceDetectionModes() {
-            String str = get(KEY_QC_FACE_DETECTION + SUPPORTED_VALUES_SUFFIX);
+            //String str = get(KEY_QC_FACE_DETECTION + SUPPORTED_VALUES_SUFFIX);
+            //return split(str);
+            String str = "off,on";
             return split(str);
          }
 
@@ -5148,6 +5802,19 @@ public class Camera {
             String v = Integer.toString(x) + "x" + Integer.toString(y);
             set(KEY_QC_TOUCH_INDEX_AEC, v);
          }
+
+
+
+         /** @hide
+         * Get Max Contrast Level
+         *
+         * @return max contrast level
+         */
+         public int getMaxContrast(){
+			return 2;
+            //return getInt(KEY_QC_MAX_CONTRAST);
+         }
+
 
          /** @hide
          * Returns the touch co-ordinates of the touch event.
@@ -5194,7 +5861,8 @@ public class Camera {
                 throw new IllegalArgumentException(
                         "Invalid Sharpness " + sharpness);
 
-            set(KEY_QC_SHARPNESS, String.valueOf(sharpness));
+            //set(KEY_QC_SHARPNESS, String.valueOf(sharpness));
+            setTF(KEY_QC_SHARPNESS, String.valueOf(sharpness));
          }
 
          /** @hide
@@ -5207,7 +5875,8 @@ public class Camera {
                 throw new IllegalArgumentException(
                         "Invalid Contrast " + contrast);
 
-            set(KEY_QC_CONTRAST, String.valueOf(contrast));
+            //set(KEY_QC_CONTRAST, String.valueOf(contrast));
+            setTF(KEY_QC_CONTRAST, String.valueOf(contrast));
          }
 
          /** @hide
@@ -5220,7 +5889,8 @@ public class Camera {
                 throw new IllegalArgumentException(
                         "Invalid Saturation " + saturation);
 
-            set(KEY_QC_SATURATION, String.valueOf(saturation));
+            //set(KEY_QC_SATURATION, String.valueOf(saturation));
+            setTF(KEY_QC_SATURATION, String.valueOf(saturation));
          }
 
          /** @hide
@@ -5237,7 +5907,8 @@ public class Camera {
          * @return sharpness level
          */
          public int getSharpness(){
-            return getInt(KEY_QC_SHARPNESS);
+            //return getInt(KEY_QC_SHARPNESS);
+            return getTFInt(KEY_QC_SHARPNESS);
          }
 
          /** @hide
@@ -5246,7 +5917,39 @@ public class Camera {
          * @return max sharpness level
          */
          public int getMaxSharpness(){
-            return getInt(KEY_QC_MAX_SHARPNESS);
+			 return 2;
+            // return getInt(KEY_QC_MAX_SHARPNESS);
+         }
+
+
+         /** @hide
+         * Set Brightness Level
+         *
+         * @param  Brightness level
+         */
+         public void setBrightness(int brightness){
+            if((brightness < 0 ) || (brightness > getMaxBrightness()))
+                throw new IllegalArgumentException(
+                        "Invalid Contrast " + brightness);
+            setTF(KEY_QC_BRIGHTNESS, String.valueOf(brightness));
+         }
+
+         /** @hide
+         * Get Max Brightness Level
+         *
+         * @return max Brightness level
+         */
+         public int getMaxBrightness(){
+			return 2;
+         }
+
+         /** @hide
+         * Get Brightness level
+         *
+         * @return Brightness level
+         */
+         public int getBrightness(){
+            return getTFInt(KEY_QC_BRIGHTNESS);
          }
 
          /** @hide
@@ -5255,16 +5958,8 @@ public class Camera {
          * @return contrast level
          */
          public int getContrast(){
-            return getInt(KEY_QC_CONTRAST);
-         }
-
-         /** @hide
-         * Get Max Contrast Level
-         *
-         * @return max contrast level
-         */
-         public int getMaxContrast(){
-            return getInt(KEY_QC_MAX_CONTRAST);
+            //return getInt(KEY_QC_CONTRAST);
+            return getTFInt(KEY_QC_CONTRAST);
          }
 
          /** @hide
@@ -5273,7 +5968,8 @@ public class Camera {
          * @return saturation level
          */
          public int getSaturation(){
-            return getInt(KEY_QC_SATURATION);
+            //return getInt(KEY_QC_SATURATION);
+            return getTFInt(KEY_QC_SATURATION);
          }
 
          /** @hide
@@ -5282,7 +5978,8 @@ public class Camera {
          * @return max contrast level
          */
          public int getMaxSaturation(){
-            return getInt(KEY_QC_MAX_SATURATION);
+            //return getInt(KEY_QC_MAX_SATURATION);
+            return 2;
          }
 
          /** @hide

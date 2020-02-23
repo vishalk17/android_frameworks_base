@@ -271,7 +271,6 @@ cc_library_shared {
         "libhwbinder",
         "libvintf",
         "libnativewindow",
-
         "libhwui",
         "libdl",
     ],
@@ -296,6 +295,20 @@ cc_library_shared {
         debuggable: {
             cflags: ["-D__ANDROID_DEBUGGABLE__"]
         },
+        
+        lineage: {
+			has_legacy_camera_hal1: {
+				// enable legacy camera HAL1 product option
+				cflags: ["-DCAMCORDER_GRALLOC_SOURCE"],
+			},
+			uses_mtk_hardware: {
+             cppflags: ["-DMTK_HARDWARE"],
+            },
+            uses_legacy_mtk_av_blob: {
+             cppflags: ["-USE_LEGACY_MTK_AV_BLOB"],
+            },
+        },
+        
         treble: {
             cflags: ["-D__ANDROID_TREBLE__"]
         },

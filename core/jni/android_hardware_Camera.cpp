@@ -34,6 +34,12 @@
 #include <camera/Camera.h>
 #include <binder/IMemory.h>
 
+#ifdef MTK_HARDWARE
+#include <camera/MtkCamera.h>
+#include <camera/IMetadataCallbacks.h>
+#include <android_runtime/android_hardware_camera2_CameraMetadata.h>
+#endif
+
 using namespace android;
 
 enum {
@@ -1086,6 +1092,80 @@ static void android_hardware_Camera_enableFocusMoveCallback(JNIEnv *env, jobject
     }
 }
 
+
+// MTK
+
+/*
+static void android_hardware_Camera_cancelContinuousShot(JNIEnv *env, jobject thiz)
+{
+    ALOGV("cancel ContinuousShot");
+    sp<Camera> camera = get_native_camera(env, thiz, NULL);
+    if (camera == 0) return;
+
+    if (camera->sendCommand(CAMERA_CMD_CANCEL_CSHOT, 0, 0) != NO_ERROR) {
+        jniThrowException(env, "java/lang/RuntimeException", "cancel ContinuousShot failed");
+    }
+}
+
+static void android_hardware_Camera_setContinuousShotSpeed(JNIEnv *env, jobject thiz, jint value)
+{
+    ALOGV("setContinuousShotSpeed");
+    sp<Camera> camera = get_native_camera(env, thiz, NULL);
+    if (camera == 0) return;
+
+    if (camera->sendCommand(CAMERA_CMD_SET_CSHOT_SPEED, value, 0) != NO_ERROR) {
+        jniThrowException(env, "java/lang/RuntimeException", "setContinuousShotSpeed failed");
+    }
+} */
+
+
+static void android_hardware_Camera_startSDPreview(JNIEnv *env, jobject thiz)
+{
+    ALOGV("startSDPreview");
+    sp<Camera> camera = get_native_camera(env, thiz, NULL);
+    if (camera == 0) return;
+
+    if (camera->sendCommand(CAMERA_CMD_START_SD_PREVIEW, 0, 0) != NO_ERROR) {
+        jniThrowException(env, "java/lang/RuntimeException", "startSDPreview failed");
+    }
+}
+
+static void android_hardware_Camera_cancelSDPreview(JNIEnv *env, jobject thiz)
+{
+    ALOGV("cancelSDPreview");
+    sp<Camera> camera = get_native_camera(env, thiz, NULL);
+    if (camera == 0) return;
+
+    if (camera->sendCommand(CAMERA_CMD_CANCEL_SD_PREVIEW, 0, 0) != NO_ERROR) {
+        jniThrowException(env, "java/lang/RuntimeException", "cancelSDPreview failed");
+    }
+}
+
+static void android_hardware_Camera_startGDPreview(JNIEnv *env, jobject thiz)
+{
+    ALOGV("startGDPreview");
+    sp<Camera> camera = get_native_camera(env, thiz, NULL);
+    if (camera == 0) return;
+
+    if (camera->sendCommand(CAMERA_CMD_START_GD_PREVIEW, 0, 0) != NO_ERROR) {
+        jniThrowException(env, "java/lang/RuntimeException", "startGDPreview failed");
+    }
+}
+
+static void android_hardware_Camera_cancelGDPreview(JNIEnv *env, jobject thiz)
+{
+    ALOGV("cancelGDPreview");
+    sp<Camera> camera = get_native_camera(env, thiz, NULL);
+    if (camera == 0) return;
+
+    if (camera->sendCommand(CAMERA_CMD_CANCEL_GD_PREVIEW, 0, 0) != NO_ERROR) {
+        jniThrowException(env, "java/lang/RuntimeException", "cancelGDPreview failed");
+    }
+}
+
+// End MTK
+
+
 static void android_hardware_Camera_sendVendorCommand(JNIEnv *env, jobject thiz,
         jint cmd, jint arg1, jint arg2)
 {
@@ -1128,6 +1208,20 @@ static const JNINativeMethod camMethods[] = {
   { "_stopPreview",
     "()V",
     (void *)android_hardware_Camera_stopPreview },
+// MTK
+  { "startSDPreview",
+    "()V",
+    (void *)android_hardware_Camera_startSDPreview },
+  { "cancelSDPreview",
+    "()V",
+    (void *)android_hardware_Camera_cancelSDPreview },
+  { "startGDPreview",
+    "()V",
+    (void *)android_hardware_Camera_startGDPreview },
+  { "cancelGDPreview",
+    "()V",
+    (void *)android_hardware_Camera_cancelGDPreview },
+// End Mtk    
   { "previewEnabled",
     "()Z",
     (void *)android_hardware_Camera_previewEnabled },

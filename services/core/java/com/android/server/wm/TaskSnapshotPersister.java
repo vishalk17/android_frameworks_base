@@ -53,10 +53,10 @@ class TaskSnapshotPersister {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "TaskSnapshotPersister" : TAG_WM;
     private static final String SNAPSHOTS_DIRNAME = "snapshots";
     private static final String REDUCED_POSTFIX = "_reduced";
-    static final float REDUCED_SCALE = ActivityManager.isLowRamDeviceStatic() ? 0.6f : 0.5f;
+    static final float REDUCED_SCALE = ActivityManager.isLowRamDeviceStatic() ? 0.6f : 0.6f;
     static final boolean DISABLE_FULL_SIZED_BITMAPS = ActivityManager.isLowRamDeviceStatic();
     private static final long DELAY_MS = 100;
-    private static final int QUALITY = 95;
+    private static final int QUALITY = 85;
     private static final String PROTO_EXTENSION = ".proto";
     private static final String BITMAP_EXTENSION = ".jpg";
     private static final int MAX_STORE_QUEUE_DEPTH = 2;

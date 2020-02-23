@@ -1881,6 +1881,16 @@ public class CameraDeviceImpl extends CameraDevice
 
                 final CaptureCallbackHolder holder =
                         CameraDeviceImpl.this.mCaptureCallbackMap.get(requestId);
+                
+                if (holder == null||resultExtras == null) {
+                    if (DEBUG) {
+                        Log.d(TAG,
+                                "holder is null, early return at frame "
+                                        + frameNumber);
+                    }
+                    return;
+                }        
+                        
                 final CaptureRequest request = holder.getRequest(resultExtras.getSubsequenceId());
 
                 boolean isPartialResult =

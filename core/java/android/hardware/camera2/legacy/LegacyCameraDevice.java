@@ -84,7 +84,7 @@ public class LegacyCameraDevice implements AutoCloseable {
     private static final int GRALLOC_USAGE_HW_RENDER = 0x00000200;
     private static final int GRALLOC_USAGE_HW_VIDEO_ENCODER = 0x00010000;
 
-    public static final int MAX_DIMEN_FOR_ROUNDING = 1920; // maximum allowed width for rounding
+    public static final int MAX_DIMEN_FOR_ROUNDING = 2176; /* changed from 1920 by TRONX2100 for MTK */ // maximum allowed width for rounding
 
     // Keep up to date with values in system/core/include/system/window.h
     public static final int NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW = 1;
@@ -386,10 +386,13 @@ public class LegacyCameraDevice implements AutoCloseable {
                         } else {
                             String reason = (sizes == null) ? "format is invalid." :
                                     ("size not in valid set: " + Arrays.toString(sizes));
-                            Log.e(TAG, String.format("Surface with size (w=%d, h=%d) and format " +
+                            Log.w(TAG, String.format("Surface with size (w=%d, h=%d) and format " +
                                     "0x%x is not valid, %s", s.getWidth(), s.getHeight(),
                                     surfaceType, reason));
-                            return BAD_VALUE;
+                            /*changed by TRONX2100 for MTK bringup googlecamera 4k video record
+                            return BAD_VALUE; */
+                            sizedSurfaces.add(new Pair<>(output, s));
+                            /* end added by TRONX */
                         }
                     } else {
                         sizedSurfaces.add(new Pair<>(output, s));
@@ -461,7 +464,7 @@ public class LegacyCameraDevice implements AutoCloseable {
                     throw new ServiceSpecificException(BAD_VALUE,
                             "submitRequestList - Null Surface targets are not allowed");
                 } else if (mConfiguredSurfaces == null) {
-                    Log.e(TAG, "submitRequestList - must configure " +
+                    Log.w(TAG, "submitRequestList - must configure " +
                             " device with valid surfaces before submitting requests");
                     throw new ServiceSpecificException(INVALID_OPERATION,
                             "submitRequestList - must configure " +

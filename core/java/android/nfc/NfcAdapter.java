@@ -43,6 +43,10 @@ import android.util.Log;
 import java.io.IOException;
 import java.util.HashMap;
 
+/// M: @ {
+import com.mediatek.nfcgsma_extras.INfcAdapterGsmaExtras;
+/// }
+
 /**
  * Represents the local NFC adapter.
  * <p>
@@ -300,6 +304,109 @@ public final class NfcAdapter {
     static INfcCardEmulation sCardEmulationService;
     static INfcFCardEmulation sNfcFCardEmulationService;
 
+   private static int nfc_mode;
+	/*TRONX2100 for MTK */
+  /**
+     *  Requester use this function to set mHandoverUseCase and uris callback on NfcActiviyManager
+     *
+     * @param  callback  the callback to set URI when prepare to BeamPlus
+     * @param  activity  the activity which use it
+     * @return     null
+     * @see        null
+     * @hide
+     * @internal
+     */
+    public void setMtkBeamPushUrisCallback(CreateBeamUrisCallback callback, Activity activity) {
+        setBeamPushUrisCallback(callback, activity);
+    }
+
+
+
+
+    /**
+     * the mode flag to controll each NFC mode.
+     * MODE_READER is used to switch Tag read/write mode
+     * @hide
+     * @internal
+     */
+    public static final int MODE_READER = 1;
+    /**
+     * the mode flag to controll each NFC mode.
+     * MODE_CARD is used to switch card emulation mode
+     * @hide
+     * @internal
+     */
+    public static final int MODE_CARD = 2;
+    /**
+     * the mode flag to controll each NFC mode.
+     * MODE_P2P is used to switch P2P mode
+     * @hide
+     * @internal
+     */
+    public static final int MODE_P2P = 4;
+    /**
+    *  To disable each NFC mode.
+     * @hide
+     * @internal
+     */
+    public static final int FLAG_OFF = 0;
+    /**
+    *  To enable each NFC mode.
+     * @hide
+     * @internal
+     */
+    public static final int FLAG_ON = 1;
+
+    /**
+     * Query specific NFC mode.
+     * @hide
+     * @param  one of the NFC mode, candidates are MODE_READER, MODE_P2P or MODE_CARD.
+     * @return  FLAG_ON or FLAG_OFF, -1 for failure
+     * @internal
+     */
+    public int getModeFlag(int mode) {
+        try {
+            return sService.getModeFlag(mode);
+        } catch (RemoteException e) {
+            attemptDeadServiceRecovery(e);
+            return -1;
+        }
+    }
+
+    /**
+     * Control specific NFC mode.
+     * @hide
+     * @param one of the NFC mode, candidates are MODE_READER, MODE_P2P or MODE_CARD.
+     * @param FLAG_ON or FLAG_OFF
+     * @internal
+     */
+    public void setModeFlag(int mode, int flag) {
+        try {
+            sService.setModeFlag(mode, flag);
+        } catch (RemoteException e) {
+            attemptDeadServiceRecovery(e);
+        }
+    }
+
+    /**
+     * @hide
+     */
+    public INfcAdapterGsmaExtras getNfcAdapterGsmaExtrasInterface() {
+        if (mContext == null) {
+            throw new UnsupportedOperationException("You need a context on NfcAdapter to use the "
+                    + " NFC gsma extras APIs");
+        }
+        try {
+            return sService.getNfcAdapterGsmaExtrasInterface(/*mContext.getPackageName()*/);
+        } catch (RemoteException e) {
+            attemptDeadServiceRecovery(e);
+            return null;
+        }
+    }
+    /// }
+
+	
+	/* end MTK */
     /**
      * The NfcAdapter object for each application context.
      * There is a 1-1 relationship between application context and

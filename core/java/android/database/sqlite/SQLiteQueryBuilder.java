@@ -28,19 +28,14 @@ import android.provider.BaseColumns;
 import android.text.TextUtils;
 import android.util.Log;
 
-import com.android.internal.util.ArrayUtils;
-
 import libcore.util.EmptyArray;
 
 import java.util.Arrays;
 import java.util.Iterator;
-import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Set;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -50,24 +45,15 @@ import java.util.regex.Pattern;
 public class SQLiteQueryBuilder
 {
     private static final String TAG = "SQLiteQueryBuilder";
+    private static final Pattern sLimitPattern =
+            Pattern.compile("\\s*\\d+\\s*(,\\s*\\d+\\s*)?");
 
     private Map<String, String> mProjectionMap = null;
-
-    private static final Pattern sAggregationPattern = Pattern.compile(
-            "(?i)(AVG|COUNT|MAX|MIN|SUM|TOTAL|GROUP_CONCAT)\\((.+)\\)");
-
-    private List<Pattern> mProjectionGreylist = null;
-
     private String mTables = "";
     private StringBuilder mWhereClause = null;  // lazily created
     private boolean mDistinct;
     private SQLiteDatabase.CursorFactory mFactory;
-
-    private static final int STRICT_PARENTHESES = 1 << 0;
-    private static final int STRICT_COLUMNS = 1 << 1;
-    private static final int STRICT_GRAMMAR = 1 << 2;
-
-    private int mStrictFlags;
+    private boolean mStrict;
 
     public SQLiteQueryBuilder() {
         mDistinct = false;
@@ -153,37 +139,6 @@ public class SQLiteQueryBuilder
     }
 
     /**
-     * Gets the projection map for the query, as last configured by
-     * {@link #setProjectionMap(Map)}.
-     *
-     * @hide
-     */
-    public @Nullable Map<String, String> getProjectionMap() {
-        return mProjectionMap;
-    }
-
-    /**
-     * Sets a projection greylist of columns that will be allowed through, even
-     * when {@link #setStrict(boolean)} is enabled. This provides a way for
-     * abusive custom columns like {@code COUNT(*)} to continue working.
-     *
-     * @hide
-     */
-    public void setProjectionGreylist(@Nullable List<Pattern> projectionGreylist) {
-        mProjectionGreylist = projectionGreylist;
-    }
-
-    /**
-     * Gets the projection greylist for the query, as last configured by
-     * {@link #setProjectionGreylist(List)}.
-     *
-     * @hide
-     */
-    public @Nullable List<Pattern> getProjectionGreylist() {
-        return mProjectionGreylist;
-    }
-
-    /**
      * Sets the cursor factory to be used for the query.  You can use
      * one factory for all queries on a database but it is normally
      * easier to specify the factory when doing this query.
@@ -215,90 +170,8 @@ public class SQLiteQueryBuilder
      * </ul>
      * By default, this value is false.
      */
-    public void setStrict(boolean strict) {
-        if (strict) {
-            mStrictFlags |= STRICT_PARENTHESES;
-        } else {
-            mStrictFlags &= ~STRICT_PARENTHESES;
-        }
-    }
-
-    /**
-     * Get if the query is marked as strict, as last configured by
-     * {@link #setStrict(boolean)}.
-     *
-     * @hide
-     */
-    public boolean isStrict() {
-        return (mStrictFlags & STRICT_PARENTHESES) != 0;
-    }
-
-    /**
-     * When enabled, verify that all projections and {@link ContentValues} only
-     * contain valid columns as defined by {@link #setProjectionMap(Map)}.
-     * <p>
-     * This enforcement applies to {@link #insert}, {@link #query}, and
-     * {@link #update} operations. Any enforcement failures will throw an
-     * {@link IllegalArgumentException}.
-     *
-     * @hide
-     */
-    public void setStrictColumns(boolean strictColumns) {
-        if (strictColumns) {
-            mStrictFlags |= STRICT_COLUMNS;
-        } else {
-            mStrictFlags &= ~STRICT_COLUMNS;
-        }
-    }
-
-    /**
-     * Get if the query is marked as strict, as last configured by
-     * {@link #setStrictColumns(boolean)}.
-     *
-     * @hide
-     */
-    public boolean isStrictColumns() {
-        return (mStrictFlags & STRICT_COLUMNS) != 0;
-    }
-
-    /**
-     * When enabled, verify that all untrusted SQL conforms to a restricted SQL
-     * grammar. Here are the restrictions applied:
-     * <ul>
-     * <li>In {@code WHERE} and {@code HAVING} clauses: subqueries, raising, and
-     * windowing terms are rejected.
-     * <li>In {@code GROUP BY} clauses: only valid columns are allowed.
-     * <li>In {@code ORDER BY} clauses: only valid columns, collation, and
-     * ordering terms are allowed.
-     * <li>In {@code LIMIT} clauses: only numerical values and offset terms are
-     * allowed.
-     * </ul>
-     * All column references must be valid as defined by
-     * {@link #setProjectionMap(Map)}.
-     * <p>
-     * This enforcement applies to {@link #query}, {@link #update} and
-     * {@link #delete} operations. This enforcement does not apply to trusted
-     * inputs, such as those provided by {@link #appendWhere}. Any enforcement
-     * failures will throw an {@link IllegalArgumentException}.
-     *
-     * @hide
-     */
-    public void setStrictGrammar(boolean strictGrammar) {
-        if (strictGrammar) {
-            mStrictFlags |= STRICT_GRAMMAR;
-        } else {
-            mStrictFlags &= ~STRICT_GRAMMAR;
-        }
-    }
-
-    /**
-     * Get if the query is marked as strict, as last configured by
-     * {@link #setStrictGrammar(boolean)}.
-     *
-     * @hide
-     */
-    public boolean isStrictGrammar() {
-        return (mStrictFlags & STRICT_GRAMMAR) != 0;
+    public void setStrict(boolean flag) {
+        mStrict = flag;
     }
 
     /**
@@ -333,6 +206,9 @@ public class SQLiteQueryBuilder
         if (TextUtils.isEmpty(groupBy) && !TextUtils.isEmpty(having)) {
             throw new IllegalArgumentException(
                     "HAVING clauses are only permitted when using a groupBy clause");
+        }
+        if (!TextUtils.isEmpty(limit) && !sLimitPattern.matcher(limit).matches()) {
+            throw new IllegalArgumentException("invalid LIMIT clauses:" + limit);
         }
 
         StringBuilder query = new StringBuilder(120);
@@ -507,13 +383,7 @@ public class SQLiteQueryBuilder
                 projectionIn, selection, groupBy, having,
                 sortOrder, limit);
 
-        if (isStrictColumns()) {
-            enforceStrictColumns(projectionIn);
-        }
-        if (isStrictGrammar()) {
-            enforceStrictGrammar(selection, groupBy, having, sortOrder, limit);
-        }
-        if (isStrict()) {
+        if (mStrict && selection != null && selection.length() > 0) {
             // Validate the user-supplied selection to detect syntactic anomalies
             // in the selection string that could indicate a SQL injection attempt.
             // The idea is to ensure that the selection clause is a valid SQL expression
@@ -531,7 +401,7 @@ public class SQLiteQueryBuilder
 
             // Execute wrapped query for extra protection
             final String wrappedSql = buildQuery(projectionIn, wrap(selection), groupBy,
-                    wrap(having), sortOrder, limit);
+                    having, sortOrder, limit);
             sql = wrappedSql;
         } else {
             // Execute unwrapped query
@@ -576,13 +446,7 @@ public class SQLiteQueryBuilder
         final String sql;
         final String unwrappedSql = buildUpdate(values, selection);
 
-        if (isStrictColumns()) {
-            enforceStrictColumns(values);
-        }
-        if (isStrictGrammar()) {
-            enforceStrictGrammar(selection, null, null, null, null);
-        }
-        if (isStrict()) {
+        if (mStrict) {
             // Validate the user-supplied selection to detect syntactic anomalies
             // in the selection string that could indicate a SQL injection attempt.
             // The idea is to ensure that the selection clause is a valid SQL expression
@@ -652,10 +516,7 @@ public class SQLiteQueryBuilder
         final String sql;
         final String unwrappedSql = buildDelete(selection);
 
-        if (isStrictGrammar()) {
-            enforceStrictGrammar(selection, null, null, null, null);
-        }
-        if (isStrict()) {
+        if (mStrict) {
             // Validate the user-supplied selection to detect syntactic anomalies
             // in the selection string that could indicate a SQL injection attempt.
             // The idea is to ensure that the selection clause is a valid SQL expression
@@ -688,82 +549,6 @@ public class SQLiteQueryBuilder
             }
         }
         return db.executeSql(sql, sqlArgs);
-    }
-
-    private void enforceStrictColumns(@Nullable String[] projection) {
-        Objects.requireNonNull(mProjectionMap, "No projection map defined");
-
-        computeProjection(projection);
-    }
-
-    private void enforceStrictColumns(@NonNull ContentValues values) {
-        Objects.requireNonNull(mProjectionMap, "No projection map defined");
-
-        final Set<String> rawValues = values.keySet();
-        final Iterator<String> rawValuesIt = rawValues.iterator();
-        while (rawValuesIt.hasNext()) {
-            final String column = rawValuesIt.next();
-            if (!mProjectionMap.containsKey(column)) {
-                throw new IllegalArgumentException("Invalid column " + column);
-            }
-        }
-    }
-
-    private void enforceStrictGrammar(@Nullable String selection, @Nullable String groupBy,
-            @Nullable String having, @Nullable String sortOrder, @Nullable String limit) {
-        SQLiteTokenizer.tokenize(selection, SQLiteTokenizer.OPTION_NONE,
-                this::enforceStrictGrammarWhereHaving);
-        SQLiteTokenizer.tokenize(groupBy, SQLiteTokenizer.OPTION_NONE,
-                this::enforceStrictGrammarGroupBy);
-        SQLiteTokenizer.tokenize(having, SQLiteTokenizer.OPTION_NONE,
-                this::enforceStrictGrammarWhereHaving);
-        SQLiteTokenizer.tokenize(sortOrder, SQLiteTokenizer.OPTION_NONE,
-                this::enforceStrictGrammarOrderBy);
-        SQLiteTokenizer.tokenize(limit, SQLiteTokenizer.OPTION_NONE,
-                this::enforceStrictGrammarLimit);
-    }
-
-    private void enforceStrictGrammarWhereHaving(@NonNull String token) {
-        if (isTableOrColumn(token)) return;
-        if (SQLiteTokenizer.isFunction(token)) return;
-        if (SQLiteTokenizer.isType(token)) return;
-
-        // NOTE: we explicitly don't allow SELECT subqueries, since they could
-        // leak data that should have been filtered by the trusted where clause
-        switch (token.toUpperCase(Locale.US)) {
-            case "AND": case "AS": case "BETWEEN": case "BINARY":
-            case "CASE": case "CAST": case "COLLATE": case "DISTINCT":
-            case "ELSE": case "END": case "ESCAPE": case "EXISTS":
-            case "GLOB": case "IN": case "IS": case "ISNULL":
-            case "LIKE": case "MATCH": case "NOCASE": case "NOT":
-            case "NOTNULL": case "NULL": case "OR": case "REGEXP":
-            case "RTRIM": case "THEN": case "WHEN":
-                return;
-        }
-        throw new IllegalArgumentException("Invalid token " + token);
-    }
-
-    private void enforceStrictGrammarGroupBy(@NonNull String token) {
-        if (isTableOrColumn(token)) return;
-        throw new IllegalArgumentException("Invalid token " + token);
-    }
-
-    private void enforceStrictGrammarOrderBy(@NonNull String token) {
-        if (isTableOrColumn(token)) return;
-        switch (token.toUpperCase(Locale.US)) {
-            case "COLLATE": case "ASC": case "DESC":
-            case "BINARY": case "RTRIM": case "NOCASE":
-                return;
-        }
-        throw new IllegalArgumentException("Invalid token " + token);
-    }
-
-    private void enforceStrictGrammarLimit(@NonNull String token) {
-        switch (token.toUpperCase(Locale.US)) {
-            case "OFFSET":
-                return;
-        }
-        throw new IllegalArgumentException("Invalid token " + token);
     }
 
     /**
@@ -826,7 +611,7 @@ public class SQLiteQueryBuilder
 
         StringBuilder sql = new StringBuilder(120);
         sql.append("UPDATE ");
-        sql.append(SQLiteDatabase.findEditTable(mTables));
+        sql.append(mTables);
         sql.append(" SET ");
 
         final String[] rawKeys = values.keySet().toArray(EmptyArray.STRING);
@@ -847,7 +632,7 @@ public class SQLiteQueryBuilder
     public String buildDelete(String selection) {
         StringBuilder sql = new StringBuilder(120);
         sql.append("DELETE FROM ");
-        sql.append(SQLiteDatabase.findEditTable(mTables));
+        sql.append(mTables);
 
         final String where = computeWhere(selection);
         appendClause(sql, " WHERE ", where);
@@ -978,23 +763,35 @@ public class SQLiteQueryBuilder
         return query.toString();
     }
 
-    private static @NonNull String maybeWithOperator(@Nullable String operator,
-            @NonNull String column) {
-        if (operator != null) {
-            return operator + "(" + column + ")";
-        } else {
-            return column;
-        }
-    }
+    private String[] computeProjection(String[] projectionIn) {
+        if (projectionIn != null && projectionIn.length > 0) {
+            if (mProjectionMap != null) {
+                String[] projection = new String[projectionIn.length];
+                int length = projectionIn.length;
 
-    /** {@hide} */
-    public @Nullable String[] computeProjection(@Nullable String[] projectionIn) {
-        if (!ArrayUtils.isEmpty(projectionIn)) {
-            String[] projectionOut = new String[projectionIn.length];
-            for (int i = 0; i < projectionIn.length; i++) {
-                projectionOut[i] = computeSingleProjectionOrThrow(projectionIn[i]);
+                for (int i = 0; i < length; i++) {
+                    String userColumn = projectionIn[i];
+                    String column = mProjectionMap.get(userColumn);
+
+                    if (column != null) {
+                        projection[i] = column;
+                        continue;
+                    }
+
+                    if (!mStrict &&
+                            ( userColumn.contains(" AS ") || userColumn.contains(" as "))) {
+                        /* A column alias already exist */
+                        projection[i] = userColumn;
+                        continue;
+                    }
+
+                    throw new IllegalArgumentException("Invalid column "
+                            + projectionIn[i]);
+                }
+                return projection;
+            } else {
+                return projectionIn;
             }
-            return projectionOut;
         } else if (mProjectionMap != null) {
             // Return all columns in projection map.
             Set<Entry<String, String>> entrySet = mProjectionMap.entrySet();
@@ -1016,71 +813,7 @@ public class SQLiteQueryBuilder
         return null;
     }
 
-    private @NonNull String computeSingleProjectionOrThrow(@NonNull String userColumn) {
-        final String column = computeSingleProjection(userColumn);
-        if (column != null) {
-            return column;
-        } else {
-            throw new IllegalArgumentException("Invalid column " + userColumn);
-        }
-    }
-
-    private @Nullable String computeSingleProjection(@NonNull String userColumn) {
-        // When no mapping provided, anything goes
-        if (mProjectionMap == null) {
-            return userColumn;
-        }
-
-        String operator = null;
-        String column = mProjectionMap.get(userColumn);
-
-        // When no direct match found, look for aggregation
-        if (column == null) {
-            final Matcher matcher = sAggregationPattern.matcher(userColumn);
-            if (matcher.matches()) {
-                operator = matcher.group(1);
-                userColumn = matcher.group(2);
-                column = mProjectionMap.get(userColumn);
-            }
-        }
-
-        if (column != null) {
-            return maybeWithOperator(operator, column);
-        }
-
-        if (mStrictFlags == 0
-                && (userColumn.contains(" AS ") || userColumn.contains(" as "))) {
-            /* A column alias already exist */
-            return maybeWithOperator(operator, userColumn);
-        }
-
-        // If greylist is configured, we might be willing to let
-        // this custom column bypass our strict checks.
-        if (mProjectionGreylist != null) {
-            boolean match = false;
-            for (Pattern p : mProjectionGreylist) {
-                if (p.matcher(userColumn).matches()) {
-                    match = true;
-                    break;
-                }
-            }
-
-            if (match) {
-                Log.w(TAG, "Allowing abusive custom column: " + userColumn);
-                return maybeWithOperator(operator, userColumn);
-            }
-        }
-
-        return null;
-    }
-
-    private boolean isTableOrColumn(String token) {
-        if (mTables.equals(token)) return true;
-        return computeSingleProjection(token) != null;
-    }
-
-    /** {@hide} */
-    public @Nullable String computeWhere(@Nullable String selection) {
+    private @Nullable String computeWhere(@Nullable String selection) {
         final boolean hasInternal = !TextUtils.isEmpty(mWhereClause);
         final boolean hasExternal = !TextUtils.isEmpty(selection);
 
